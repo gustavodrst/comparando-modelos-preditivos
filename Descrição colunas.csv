@@ -1,0 +1,20 @@
+Variável,Tipo,Descrição
+Age,int,Idade do participante
+Height_cm,int,Altura em cm
+Weight_kg,int,Peso em Kg
+Position,chr,Posição de jogo
+Training_Hours_Per_Week,num,Horas de treino por semana
+Matches_Played_Past_Season,int,Partidas disputadas
+Previous_Injury_Count,int,Histórico de lesão
+Knee_Strength_Score,num,Força do joelho
+Hamstring_Flexibility,num,Flexibilidade dos isquiotibiais
+Reaction_Time_ms,num,Tempo de reação
+Balance_Test_Score,num,Equilíbrio
+Sprint_Speed_10m_s,num,Velocidade de corrida
+Agility_Score,num,Agilidade
+Sleep_Hours_Per_Night,num,Horas de sono
+Stress_Level_Score,num,Nível de estresse
+Nutrition_Quality_Score,num,Qualidade da Nutrição
+Warmup_Routine_Adherence,int,Adesão à rotina de aquecimento
+Injury_Next_Season,int,Possibilidade de lesão (Variável alvo)
+BMI,num,IMC

@@ -1,0 +1,559 @@
+---
+title: "Utilizando modelos de classificação para previsão de lesões no futebol universitário"
+subtitle: "*Uma análise de comparação de desempenho de modelos de classificação*"
+author: "Gustavo Trindade"
+number-sections: true
+number-depth: 4
+lang: pt
+date: today
+format:
+  html:
+    code-fold: true # mostrar código
+    html-math-method: katex
+    toc: true
+    toc-location: right
+    respect-user-color-scheme: true
+theme:
+  dark: darkly
+  light: flatly
+editor: visual
+---
+
+## Introdução
+
+O futebol, como esporte de alta intensidade e contato, demanda um desempenho físico excepcional de seus atletas. A busca constante por vantagens competitivas elevou a importância de estratégias de otimização de performance e, crucialmente, de prevenção de lesões. Historicamente, a abordagem para a gestão da saúde dos jogadores era reativa, focada no tratamento após a ocorrência de uma lesão. Contudo, a evolução da ciência e da tecnologia nos permite uma transição para um paradigma proativo, onde a prevenção se torna o foco principal.
+
+A capacidade de prever a probabilidade de um atleta sofrer uma lesão representa uma mudança fundamental nessa dinâmica. A utilização de modelos de classificação surge como uma ferramenta de valor inestimável para essa tarefa. Ao integrar e analisar uma variedade de dados desde a carga de treino e o histórico de lesões até informações biomecânicas e biológicas, esses modelos podem identificar padrões complexos e predizer o risco de lesão. A relevância dessa abordagem se estende por múltiplos domínios: do ponto de vista médico, permite a intervenção precoce e personalizada, no âmbito esportivo, contribui para a otimização da carga de treinamento e a redução do tempo de inatividade, e em termos financeiros, protege o investimento em atletas de alto nível. Portanto, este estudo visa explorar a aplicação e a eficácia de modelos de classificação para a previsão de lesões no futebol, demonstrando como essa abordagem baseada em dados é essencial para a saúde e o sucesso a longo prazo dos jogadores e de suas equipes.
+
+### Objetivo
+
+Este estudo tem como objetivo principal analisar e comparar a eficácia de três modelos de classificação: Árvore de decisão, Floresta aleatória(Random Forest) e KNN (k-Nearest Neighbors) para prever lesões no futebol. A comparação será pautada em métricas de desempenho essenciais, como acurácia, sensibilidade e precisão, a fim de determinar qual modelo apresenta a melhor performance preditiva para prever lesões no futebol.
+
+#### Questões de pesquisa
+
+-   Qual a posição no futebol é mais sucetível a lesões?
+
+-   A rotina de aquecimento desempenha um papel fundamental na prevenção de lesões?
+
+-   Qual modelo melhor prevê lesões nos jogadores?
+
+-   Quais váriaveis são mais importantes para a previsão de lesões desse modelo?
+
+-   Teria aplicabilidade para a UFU?
+
+## Dados
+
+O conjunto de dados escolhido foi o `Conjunto de dados de previsão de lesões no futebol universitário`, retirado o site [kaggle](https://www.kaggle.com/datasets/yuanchunhong/university-football-injury-prediction-dataset/data).
+
+### Descrição do conjunto de dados e objetivo
+
+Esta base de dados reúne informações detalhadas de 800 futebolistas universitários da China, atuantes em ligas de nível universitário e provincial. O propósito principal é aplicar modelos de classificação de aprendizado de máquina para antecipar a probabilidade de um atleta sofrer uma lesão durante a próxima temporada.
+
+#### Variáveis presentes no data frame
+
+```{r}
+#| warning: false
+#| echo: false #ecoar o códgio, false(não mostra)
+library(dplyr)
+library(readr)
+descricao <- read.csv("Descrição colunas.csv")
+knitr::kable(descricao)
+```
+
+A variável alvo deste estudo, `Injury_Next_Season` (Possibilidade de Lesão), é uma classificação binária que identifica a possibilidade de ocorrência de lesões na próxima temporada. Uma lesão é definida como qualquer dano relacionado ao treinamento ou competição que resulte em 7 ou mais dias consecutivos de afastamento, conforme verificado pela equipe técnica e pelo centro médico universitário.
+
+## Materias e Métodos
+
+O pré-processamento dos dados consistiu em duas etapas principais: a verificação de dados faltantes em todas as colunas e a conversão da variável resposta de numérica para factor, garantindo assim a qualidade e a prontidão dos dados para análise.
+
+```{r}
+#| warning: false
+#| echo: false #ecoar o códgio, false(não mostra)
+
+# Bibliotecas que serão utilizadas no projeto
+
+library(readr) # Utilizada para a leitura de arquivos(CSV, TXT, XLSX....)
+library(rpart) # Utilizada para construir a árvore de decisão
+library(rpart.plot) # Utiizada para plotar a árvore
+library(randomForest) # Utilizada para construir a Floresta aleátória
+library(caret) # Utilizado para treinar o modelo KNN com validação cruzada
+library(class) # Para utilizar o o modelo KNN
+library(tidyverse) # Utilizada para tratamento de dados
+library(ggplot2) # Utilizada para visualização dos dados
+library(DataExplorer) # Para utilizar função plot_missing
+library(patchwork) # Utilizada para montar combinação de gráficos
+library(fastDummies) # Utilizada para realizar o One-Hot Encoding para o modelo KNN
+library(ggcorrplot) # Utilizado para construir a correlação
+library(tibble) # para Utilizar a função rownames_to_column()
+```
+
+```{r}
+#| warning: false
+
+# Leitura da base de dados retirada do Site Kaggle.
+
+dados <- read.csv("data.csv", sep= ",")
+
+# Convertendo a variavel alvo para fator
+dados <- dados |>
+  mutate(Injury_Next_Season = as.factor(Injury_Next_Season))
+
+# Verificando se temos valores missing em cada uma das colunas
+plot_missing(dados,
+             group = list(Good = 0.0, OK = 0.4, Bad = 0.8, Remove = 1),
+             title = "Porcentagem de valores ausentes na base de dados",
+             ggtheme = theme_bw(),
+             theme_config = list(legend.position = "none",plot.title = element_text(hjust = 0.5)))
+```
+
+### Modelos de classificação
+
+O presente estudo empregou uma abordagem de aprendizado de máquina supervisionado para classificar jogadores suscetíveis a lesões para a próxima temporada, utilizando três modelos distintos: Árvore de Decisão, Floresta Aleatória e KNN (k-Nearest Neighbors). A verificação dessas ocorrências foi realizada e confirmada pelo centro médico universitário e pela equipe técnica.
+
+Modelos de Classificação
+
+1.  Árvore de Decisão: A Árvore de Decisão é um modelo preditivo que utiliza uma abordagem hierárquica, baseada em regras condicionais, para classificar os dados. O modelo constrói uma estrutura de árvore com nós de decisão, que representam testes em atributos, e nós folha, que correspondem às classificações finais (lesão ou sem lesão). Para este estudo, a árvore foi treinada com o objetivo de encontrar os melhores pontos de divisão nos dados que maximizem a pureza dos nós, resultando em uma lógica de fácil interpretação para a previsão de lesões.
+
+2.  Floresta Aleatória(Random Forest): A Floresta Aleatória opera construindo múltiplas árvores de decisão em subconjuntos aleatórios dos dados e das variáveis. Para a classificação de um novo jogador, o modelo agrega as previsões de cada árvore individual e determina a classe final por meio de um sistema de voto majoritário. Esta abordagem foi utilizada para mitigar o risco de overfitting inerente a árvores de decisão únicas e para aumentar a robustez e a precisão das previsões de lesões.
+
+3.  KNN (k-Nearest Neighbors): O KNN é um algoritmo de aprendizado de máquina não-paramétrico que classifica novas observações com base em sua similaridade com as observações existentes. A classificação de um jogador é determinada pela classe majoritária de seus k vizinhos mais próximos no espaço multidimensional dos dados. Para a aplicação deste modelo, a distância euclidiana foi utilizada como métrica para identificar os vizinhos mais próximos, com a finalidade de classificar a possibilidade de lesão com base nas características de jogadores com perfis semelhantes.
+
+A eficácia de cada modelo será avaliada com base em métricas de desempenho essenciais, como acurácia, sensibilidade e precisão, que permitirão determinar qual dos três modelos oferece a melhor performance preditiva para o problema de classificação de lesões.
+
+No entanto, antes de realizar a construção e aplicação dos modelos a base de dados, uma análise exploratória preliminar foi conduzida. Neste processo, foram geradas visualizações como histogramas e boxplots dos parâmetros físicos dos jogadores, o que possibilitou a identificação de padrões e a verificação de potenciais relações entre as variáveis com o objetivo de compreender a estrutura e a distribuição dos dados.
+
+Hitogramas e Boxsplots:
+
+```{r}
+#| warning: false
+
+# Vizulizando os dados quanto a parametros físicos dos jogadores
+
+# Histogramas
+
+# Distribuição Altura
+h1 <- dados |>
+  ggplot(aes(x=Height_cm))+
+  geom_histogram(bins=15, alpha=0.5, fill = "skyblue",color = "black", position = "identity")+
+  labs(title = "Distribuição altura", y = "Frequência", x = "Altura(cm)")+
+  scale_x_continuous(breaks = seq(150,200, by = 5))+
+  scale_y_continuous(breaks = seq(0,200, by = 20))+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Distribuição peso
+h2 <- dados |>
+  ggplot(aes(x=Weight_kg))+
+  geom_histogram(bins=15, alpha=0.5, fill = "skyblue",color = "black", position = "identity")+
+  labs(title = "Distribuição peso", y = "Freqência", x = "Peso(Kg)")+
+  scale_x_continuous(breaks = seq(40,110, by =5))+
+  scale_y_continuous(breaks = seq(0,200, by = 20))+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Distribuição Idade
+h3 <- dados |>
+  ggplot(aes(x=Age))+
+  geom_histogram(bins=7, alpha=0.5, fill = "skyblue",color = "black", position = "identity")+
+  labs(title = "Distribuição idade", y = "Frequência", x = "Idade(anos)")+
+  scale_x_continuous(breaks = seq(18,24, by =1))+
+  scale_y_continuous(breaks = seq(0,200, by = 20))+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Distribuição IMC
+h4 <- dados |>
+  ggplot(aes(x=BMI))+
+  geom_histogram(bins=15, alpha=0.5, fill = "skyblue",color = "black", position = "identity")+
+  labs(title = "Distribuição IMC", y = "Frequência", x = "IMC")+
+  scale_x_continuous(breaks = seq(13,37, by =2))+
+  scale_y_continuous(breaks = seq(0,200, by = 20))+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Gráficos de distribuição juntos
+(h1 + h2) / (h3 + h4)
+```
+
+```{r}
+#| warning: false
+
+# BoxPlots
+
+# Boxplot altura 
+b1 <- dados |>
+  ggplot(aes(y=Height_cm, x=""))+
+  geom_errorbar(stat="boxplot", width = 0.1)+
+  geom_boxplot(width = 0.6,fill="skyblue", outlier.shape = 1)+
+  labs(title = "Boxsplot altura",y = "Altura(cm)", x = "")+
+  scale_y_continuous(breaks = seq(150,200, by = 5))+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Boxplot peso
+b2 <- dados |>
+  ggplot(aes(y=Weight_kg, x=""))+
+  geom_errorbar(stat="boxplot", width = 0.1)+
+  geom_boxplot(width = 0.6,fill="skyblue", outlier.shape = 1)+
+  labs(title = "Boxsplot peso",y = "Peso(Kg)", x = "")+
+  scale_y_continuous(breaks = seq(40,110, by = 5))+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Boxplot IMC
+b3 <- dados |>
+  ggplot(aes(y=BMI, x=""))+
+  geom_errorbar(stat="boxplot", width = 0.1)+
+  geom_boxplot(width = 0.6,fill="skyblue", outlier.shape = 1)+
+  labs(title = "Boxsplot IMC",y = "IMC", x = "")+
+  scale_y_continuous(breaks = seq(13,37, by = 3))+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Gráficos de Boxplot juntos
+b1 + b2 + b3
+
+```
+
+Por meio do seguinte gráfico foi identificado que não há posição de jogo que apresenta destaque na média de lesões.
+
+```{r}
+#| warning: false
+# AGRUPAR E SOMAR AS LESÕES POR POSIÇÃO
+lesoes <- dados|>
+  group_by(Position)|>
+  summarise(total_lesoes = round(mean(Previous_Injury_Count),2))
+
+# Gráfico de lesões por posição
+lesoes |>
+  ggplot(aes(x=Position, y =total_lesoes))+
+  geom_bar(stat = "identity", fill = "skyblue")+
+  geom_label(aes(label = total_lesoes),
+             vjust = 1.5, # Ajuste para ficar dentro da barra
+             fill = "white", # Cor do fundo do rótulo
+             colour = "black", # Cor do texto
+             size = 3.5)+
+  labs(title = "Média de lesões por posição", y = "Média de lesões", x = "Posição")+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+Além disso, atletas com maior adesão à rotina de aquecimento apresentam ligeira média menor de lesões durante a temporada.
+
+```{r}
+#| warning: false
+
+# AGRUPAR E SOMAR AS LESÕES POR ADESÃO
+lesoes_aquecimento <- dados|>
+  group_by(Warmup_Routine_Adherence)|>
+  summarise(total_lesoes = round(mean(Previous_Injury_Count), 2))
+
+# Gráfico de lesões por adesão a rotina de aquecimento
+lesoes_aquecimento |>
+  ggplot(aes(x=Warmup_Routine_Adherence, y = total_lesoes))+
+  geom_bar(stat = "identity", fill = "skyblue")+
+  geom_label(aes(label = total_lesoes),
+             vjust = 1.5, # Ajuste para ficar dentro da barra
+             fill = "white", # Cor do fundo do rótulo
+             colour = "black", # Cor do texto
+             size = 3.5)+
+  scale_x_continuous(breaks = seq(0,1, by = 1))+
+  labs(title = "Média de lesões na temporada e rotina de aquecimento", y = "Média de lesões", x = "	Adesão à rotina de aquecimento")+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+Por fim, foi realizada uma análise de correlação utilizando o metódo de Pearson para quantificar o grau de relação entre as variáveis de estudo e a variável alvo.
+
+```{r}
+#| warning: false
+#| eval: false
+# Construindo um gráfico de correlação utilizando método de Pearson
+# Para isso não utilizaremos a variável Position e retornaremos a coluna Injury_Next_Season para numeric
+correlacao <- dados |>
+  select(-Position) |>
+  mutate(Injury_Next_Season = as.numeric(Injury_Next_Season))
+
+# Matriz de correlação
+correl <- cor(correlacao)
+
+# Montando o gráfico
+ggcorrplot(correl,
+           hc.order = TRUE,
+           type = "lower",
+           ggtheme =ggplot2::theme_bw()+
+             theme(plot.title = element_text(hjust = 0.5), legend.text = element_text(size = 5)),
+           title = "Mapa de calor de correlação de características numéricas",
+           legend.title = "Correlação",
+           lab = TRUE,lab_size = 2)
+```
+
+![](Correlação.png)
+
+Observou-se que as seguintes variáveis apresentam correlação direta forte: Stress_Level_Score (Nível de estresse), Reaction_Time_ms (Tempo de reação) e Previous_Injury_Count (Histórico de lesão).
+
+Por outro lado, as variáveis com correlação inversa proeminente são: Sleep_Hours_Per_Night (Horas de sono), Balance_Test_Score (Equilíbrio) e Sprint_Speed_10m_s (Velocidade de corrida).
+
+## Resultados
+
+Para verificar o modelo que melhor prediz se o jogador irá se lesionar na próxima temporada foram utilizadas as seguintes métricas:
+
+Acurácia: mede a proporção de todas as previsões que o modelo acertou em relação ao total de previsões.
+
+$$Acurácia = \frac{VP+VN}{VP+VN+FP+FN}$$
+
+Precisão: mede a capacidade do modelo de fazer previsões positivas corretamente
+
+$$Precisão = \frac{VP}{VP+FP}$$
+
+Sensibilidade: mede a capacidade do modelo de encontrar corretamente todos os casos positivos
+
+$$Sensibilidade = \frac{VP}{VP+FN}$$ Onde:
+
+-   Verdadeiro Positivo (VP): O modelo acertou a classe positiva.
+-   Verdadeiro Negativo (VN): O modelo acertou a classe negativa.
+-   Falso Negativo (FN): O modelo classificou como negativa, mas o real era positivo.
+-   Falso Positivo (FP): O modelo classificou como positiva, mas o real era negativo.
+
+### Aplicação dos modelos
+
+O primeiro modelo utilizado foi a Árvore de decisão, sendo obtido a seguinte árvore:
+
+```{r}
+#| warning: false
+#| echo: true #ecoar o códgio, false(não mostra)
+#| output: true
+# Determinando uma semente para fins de reprodutibilidade
+set.seed(1915)
+
+# Embaralhando os dados
+dados <- dados[sample(nrow(dados)),] 
+
+# A seguir, dividiremos os dados em conjuntos de treino e teste. Deixaremos 80% dos dados para treino e 20% para teste. Essas bases serão utilizados para treinar e testar os modelos.
+n <- round(0.8*nrow(dados))
+dados_treino <- dados[1:n,]
+dados_teste <- dados[-(1:n),]
+
+# Criando a árvore grande
+arvore_lesao_grande <- rpart(Injury_Next_Season ~., data = dados_treino, method = "class")
+
+# Aplicando a árvore grande
+previsao_arvore_grande <- predict(arvore_lesao_grande, dados_teste, type = "class")
+
+# Contruindo matriz de confusão e demais métricas para a árvore grande
+matriz_arvore_grande<- confusionMatrix(table(previsao_arvore_grande, dados_teste$Injury_Next_Season),positive ="1")
+
+# Verificando os valores para xerror
+xerror <- arvore_lesao_grande$cptable
+
+# Selecinando o melhor xerror e alfa
+menor <- which.min(arvore_lesao_grande$cptable[, "xerror"])
+alpha_otimo <- arvore_lesao_grande$cptable[menor,"CP"]
+
+# Apliacando a poda
+arvore_podada <- prune(arvore_lesao_grande, cp = alpha_otimo)
+
+# Aplicando a árvore podada
+previsao_poda <- predict(arvore_podada, newdata = dados_teste, type = "class")
+
+# Contruindo matriz de confusão e demais métricas para a árvore podada
+matriz_arvore_podada<- confusionMatrix(table(previsao_poda, dados_teste$Injury_Next_Season),positive = "1")
+
+# Plotando a árvore podada
+rpart.plot(arvore_podada, extra = 101)
+```
+
+Foi obtido a seguinte matriz de confusão do modelo árvore de decisão:
+
+|                   | Real positivo | Real negativo |
+|-------------------|---------------|---------------|
+| Previsto positivo | 60            | 14            |
+| Previsto negativo | 20            | 66            |
+
+```{r}
+#| warning: false
+#| echo: true #ecoar o códgio, false(não mostra)
+#| eval: false
+# CONSTRUINDO E APLICANDO O MODELO KNN
+
+# Vamos normalizar a coluna "Position" utilizando o metodo One-Hot Encoding
+# Aplicar One-Hot Encoding para a base teste
+dados_teste_knn <- dummy_cols(dados_teste, 
+                              select_columns = c("Position"),
+                              remove_first_dummy = FALSE,
+                              remove_selected_columns = TRUE)
+
+# Aplicar One-Hot Encoding para a base treino
+dados_treino_knn <- dummy_cols(dados_treino, 
+                               select_columns = c("Position"),
+                               remove_first_dummy = FALSE,
+                               remove_selected_columns = TRUE)
+
+# Padronizando os dados exceto minha variável alvo
+treino_padronizado <- scale(dados_treino_knn[,-17])
+teste_padronizado <- scale(dados_teste_knn[,-17])
+
+# Vamos utilizar o Crossvalidation com 10 folds (10 subpastas)
+controle <- trainControl(method ="cv",
+                         number = 10)
+
+# Grid de valores de k(vizinhos próximos) para testar
+grid_k <- expand.grid(k = 1:20)
+
+# Verificando o desempenho para 10 folds e k de 1 a 20
+treinamento <- train(Injury_Next_Season ~ .,
+                     data = dados_treino,
+                     trControl = controle,
+                     preProcess = c("center", "scale"),
+                     method = "knn",
+                     tuneGrid = grid_k)
+
+# Visualizando a Acurácia X número de vizinhos
+plot(treinamento) 
+
+# Melhor KNN
+treinamento$finalModel
+
+# Modelo KNN com a melhor acurácia
+modelo_knn <- knn(train = treino_padronizado,
+                  test = teste_padronizado,
+                  cl = dados_treino_knn$Injury_Next_Season,
+                  k = treinamento$bestTune)
+
+# matriz de confusão do modelo final
+matriz_KNN <- confusionMatrix(reference = dados_teste_knn$Injury_Next_Season, 
+                              data = modelo_knn, 
+                              positive = "1")
+```
+
+O segundo modelo utilizado foi o KNN, obtendo a seguinte matriz de confusão:
+
+|                   | Real positivo | Real negativo |
+|-------------------|---------------|---------------|
+| Previsto positivo | 75            | 2             |
+| Previsto negativo | 5             | 78            |
+
+```{r}
+#| warning: false
+#| echo: true #ecoar o códgio, false(não mostra)
+#| eval: false
+# CONSTRUINDO E APLICANDO A FLORESTA ALEATÓRIA
+
+# Construindo a Floresta aleatória
+modelo.floresta <- randomForest(Injury_Next_Season ~.,
+                                data = dados_treino,
+                                importance = TRUE)
+
+# Aplicando a Floresta aleatória
+previsao.floresta <- predict(modelo.floresta, newdata = dados_teste, type = "class")
+
+# Matriz de confusão do modelo
+matriz_floresta <- confusionMatrix(reference = dados_teste$Injury_Next_Season,
+                                   data = previsao.floresta,
+                                   positive = "1")
+
+# Verificando a ordem de importância das variaveis
+importancia <- data.frame(importance(modelo.floresta)) 
+
+# Averiguando as variaveis mais importantes 
+varImpPlot(modelo.floresta)
+
+# Construindo o gráfico das top 10 variáveis
+importancia |>
+  arrange(MeanDecreaseAccuracy)|>
+  #top_n(15, MeanDecreaseAccuracy)|>
+  rownames_to_column( var = "variaveis")|>
+  ggplot(aes(y=reorder(variaveis,MeanDecreaseAccuracy),x = MeanDecreaseAccuracy))+
+  labs(title = "Importância da variável para o modelo",y = "Variável", x = "medida da adequação da variável como preditora.")+
+  geom_col(aes(fill = MeanDecreaseAccuracy))+
+  scale_x_continuous(breaks = seq(0,40, by =2))+
+  scale_fill_gradient(low = "darkblue", high = "firebrick") +
+  theme_bw()+
+  theme(legend.position = "none",plot.title = element_text(hjust = 0.5))
+
+# Selecionando as 10 melhores variáveis
+top_10 <- importancia|>
+  rownames_to_column(var="variaveis")|>
+  arrange(MeanDecreaseAccuracy)|>
+  top_n(10,MeanDecreaseAccuracy)
+
+# Nome das variáveis a serem utilizadas
+nomes <- top_10$variaveis
+
+# Recriando a floresta apenas com as TOP 10 variáveis
+modelo.floresta.red <- randomForest(Injury_Next_Season ~.,
+                                    data = dados_treino[,c("Injury_Next_Season", nomes)],
+                                    importance = TRUE)
+
+# Aplicando a floresta reduzida
+previsao.floresta.red <- predict(modelo.floresta.red, newdata = dados_teste, type = "class")
+
+# Matriz de confusão do modelo reduzido
+matriz_floresta.red <- confusionMatrix(reference = dados_teste$Injury_Next_Season,
+                                       data = previsao.floresta.red,
+                                       positive = "1")
+```
+
+Por fim, o último modelo de classificação praticado foi a Floresta aleatória, o qual retornou a seguinte matriz de confusão:
+
+|                   | Real positivo | Real negativo |
+|-------------------|---------------|---------------|
+| Previsto positivo | 77            | 4             |
+| Previsto negativo | 3             | 76            |
+
+Desse modo, obtvemos as seguintes metricas dos modelos:
+
+```{r}
+#| warning: false
+#| echo: false #ecoar o códgio, false(não mostra)
+# Exemplo de criação de tabela com data.frame
+tabela_modelos <- data.frame(
+  Métricas = c("Árvore de decisão","KNN", "Floresta aleatória"),
+  Acurácia = c("78.75%","95.62%","95.62%"),
+  Precisão = c("81.08%","97.40%","95.06%"),
+  Sensibilidade = c("75.0%","93.75%","96.25%")
+)
+
+# Para formatar e exibir a tabela, use kable do knitr
+knitr::kable(tabela_modelos, caption = "Comparação das métricas obtidas")
+```
+
+## Discussão
+
+Para prever uma lesão, o custo de um falso negativo é muito mais alto do que o de um falso positivo. É preferível poupar um jogador desnecessariamente do que arriscar uma lesão grave que não foi prevista.
+
+Por esse motivo, a Sensibilidade é a métrica mais importante neste cenário.
+
+Considerando isso, o melhor modelo seria a Floresta aleatória. Embora o KNN tenha uma precisão ligeiramente maior, a Floresta aleatória é superior na capacidade de detectar a maior quantidade possível de lesões reais pois possui a maior sensibilidade, o que é o objetivo principal para garantir a saúde do atleta.
+
+### Limitações do Estudo
+
+Apesar dos resultados promissores, o estudo possui algumas limitações importantes que devem ser consideradas:
+
+-   Generalização dos Dados: O conjunto de dados é específico para 800 futebolistas universitários da China. Os resultados podem não ser diretamente aplicáveis a atletas profissionais, de outras nacionalidades, faixas etárias ou gênero, que possuem diferentes cargas de treino, fisiologias e acompanhamento médico.
+
+-   Definição de Lesão: A lesão foi definida como um afastamento de 7 ou mais dias consecutivos. Isso exclui lesões mais leves ou dores crônicas que, embora não causem um afastamento longo, podem impactar o desempenho e ser precursoras de problemas mais graves.
+
+-   Variáveis: Fatores como dados biomecânicos mais detalhados, predisposição genética, aspectos psicológicos aprofundados ou qualidade da recuperação pós-treino não foram incluídos e poderiam aprimorar a previsão.
+
+### Sugestões para rabalhos futuros
+
+Com base nas limitações identificadas, os seguintes passos poderiam aprofundar e expandir esta pesquisa:
+
+-   Ampliar a Amostra de Dados: Coletar dados de diferentes populações de atletas tais como profissionais, femininas, de outras ligas e países para criar modelos mais robustos e generalizáveis. A própria questão de pesquisa sobre a aplicabilidade na UFU aponta para essa direção.
+
+-   Incorporar Novas Variáveis: Utilizar tecnologias de monitoramento, como sensores, para obter dados em tempo real sobre carga de trabalho, impacto e fadiga, enriquecendo o conjunto de preditores.
+
+-   Explorar Outros Algoritmos: Testar modelos mais complexos, como Redes Neurais ou modelos de Deep Learning, que podem capturar padrões não lineares mais complexos nos dados.
+
+-   Validação em Ambiente Real: Implementar o modelo Floresta aleatória como uma ferramenta de triagem em uma equipe real, tal como a da UFU, validando se as intervenções preventivas baseadas em suas previsões de fato reduzem a incidência de lesões.
+
+## Conclusão
+
+Este estudo demonstrou a viabilidade e a eficácia da aplicação de modelos de aprendizado de máquina para a previsão de lesões no futebol universitário. A análise exploratória identificou variáveis com forte correlação com a ocorrência de lesões, incluindo fatores de risco como alto nível de estresse, maior tempo de reação e histórico de lesões prévias, e fatores de proteção como mais horas de sono e melhor equilíbrio. A comparação de modelos mostrou que o Floresta aleatória e o KNN superam a Árvore de Decisão.
+
+O modelo Floresta aleatória foi identificado como o de melhor desempenho geral. Com maior acurácia e sensibilidade entre os modelos testados, sendo assim, ele oferece a melhor capacidade para identificar corretamente os atletas em risco de sofrer uma lesão futura, alinhando-se perfeitamente com o objetivo principal de identificar os jogares com maior potencial de lesionarem.
+
+A implementação de um modelo preditivo como o Floresta aleatória pode transformar a gestão da saúde dos atletas, passando de uma abordagem reativa para uma proativa. As equipes podem utilizar o modelo para triar atletas, identificar aqueles com maior risco de lesão e intervir preventivamente por meio de programas de treinamento personalizados, ajustes na carga de trabalho, fisioterapia focada e monitoramento aprimorado.
+
+Portanto, uma abordagem orientada por dados, através de modelos de classificação, é uma estratégia poderosa e eficaz para a prevenção de lesões no esporte. O estudo comprova que é possível prever com alta precisão o risco de lesões, permitindo que as equipes ajam antes que elas ocorram.
